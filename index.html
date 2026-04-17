@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
     :root {
@@ -215,6 +216,26 @@
     .empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 1.5rem 0; }
     .group-body.drag-over { border-color: var(--brand); background: var(--brand-light); }
 
+    /* Login screen */
+    #loginScreen {
+      position: fixed;
+      inset: 0;
+      background: var(--brand-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    #loginScreen.hidden { display: none; }
+    .login-box {
+      background: var(--elevated);
+      border-radius: 18px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+    }
+
     /* Sync status dot */
     #syncDot {
       width: 8px; height: 8px; border-radius: 50%;
@@ -233,6 +254,26 @@
 </head>
 <body class="relative z-10">
 
+<!-- LOGIN SCREEN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h2 style="font-size:1.5rem;margin-bottom:0.25rem;letter-spacing:-0.02em;">Rejstřík klientů</h2>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:1.75rem;">Přihlaste se pro přístup</p>
+    <form id="loginForm" onsubmit="doLogin(event)" novalidate>
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">E-mail</label>
+        <input id="l_email" type="email" placeholder="vas@email.cz" required />
+      </div>
+      <div style="margin-bottom:1.25rem;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Heslo</label>
+        <input id="l_password" type="password" placeholder="••••••••" required />
+      </div>
+      <p id="loginError" style="color:#c0392b;font-size:0.8rem;margin-bottom:0.75rem;display:none;"></p>
+      <button type="submit" class="btn-primary" id="loginBtn" style="width:100%;justify-content:center;">Přihlásit se</button>
+    </form>
+  </div>
+</div>
+
 <!-- HEADER -->
 <header style="background: var(--brand-dark);" class="relative overflow-hidden">
   <div style="background: radial-gradient(ellipse at 20% 50%, rgba(45,144,104,0.4) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(26,107,74,0.3) 0%, transparent 60%);position:absolute;inset:0;pointer-events:none;"></div>
@@ -247,6 +288,7 @@
     <div class="flex items-center gap-3">
       <input id="searchInput" type="search" placeholder="Hledat klienta…" style="width:220px; background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); color:#fff;" oninput="renderAll()" />
       <button class="btn-primary" onclick="openNewModal()" style="background:var(--brand-mid);">+ Nový klient</button>
+      <button onclick="doLogout()" style="background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:0.5rem 1rem;font-size:0.8rem;cursor:pointer;" title="Odhlásit se">Odhlásit</button>
     </div>
   </div>
 </header>
@@ -342,7 +384,50 @@ const firebaseConfig = {
   appId: "1:587100265925:web:9f51baaa995ec81cbaffac"
 };
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+const db   = firebase.firestore();
+const auth = firebase.auth();
+
+// ─── AUTH ─────────────────────────────────────────────────────────────
+auth.onAuthStateChanged(user => {
+  if (user) {
+    document.getElementById('loginScreen').classList.add('hidden');
+    startApp();
+  } else {
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+});
+
+async function doLogin(e) {
+  e.preventDefault();
+  const email    = document.getElementById('l_email').value.trim();
+  const password = document.getElementById('l_password').value;
+  const btn      = document.getElementById('loginBtn');
+  const errEl    = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Přihlašuji…';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch (err) {
+    errEl.textContent = 'Špatný e-mail nebo heslo.';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Přihlásit se';
+  }
+}
+
+function doLogout() {
+  auth.signOut();
+}
+
+let appStarted = false;
+function startApp() {
+  if (appStarted) return;
+  appStarted = true;
+  initFirestoreListener();
+}
+
+function initFirestoreListener() {
 
 // ─── SKUPINY ─────────────────────────────────────────────────────────
 const GROUPS = [
@@ -357,20 +442,21 @@ let clients = [];
 let editingId = null;
 
 // ─── REAL-TIME LISTENER ──────────────────────────────────────────────
-setSyncStatus('syncing', 'Připojování…');
+  setSyncStatus('syncing', 'Připojování…');
 
-db.collection('clients').onSnapshot(
-  snapshot => {
-    clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    document.getElementById('loadingMsg')?.remove();
-    setSyncStatus('online', 'Synchronizováno');
-    renderAll();
-  },
-  err => {
-    setSyncStatus('offline', 'Chyba připojení');
-    toast('Chyba připojení k databázi.', 'error');
-  }
-);
+  db.collection('clients').onSnapshot(
+    snapshot => {
+      clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      document.getElementById('loadingMsg')?.remove();
+      setSyncStatus('online', 'Synchronizováno');
+      renderAll();
+    },
+    err => {
+      setSyncStatus('offline', 'Chyba připojení');
+      toast('Chyba připojení k databázi.', 'error');
+    }
+  );
+}
 
 function setSyncStatus(state, label) {
   const dot = document.getElementById('syncDot');
@@ -692,6 +778,7 @@ function toast(msg, type) {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal(); closeDetail(); }
 });
+
 </script>
 </body>
 </html>
