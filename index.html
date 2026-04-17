@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rejstřík klientů</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --brand: #1a6b4a;
+      --brand-light: #e8f5ef;
+      --brand-mid: #2d9068;
+      --brand-dark: #114433;
+      --surface: #f7f9f8;
+      --elevated: #ffffff;
+      --text: #1a1f1d;
+      --muted: #6b7a73;
+      --border: #d4e0da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--surface);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    h1, h2, h3 { font-family: 'Playfair Display', serif; }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+      border-radius: 8px;
+      padding: 0.5rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+      letter-spacing: 0.01em;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.15s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
+      box-shadow: 0 2px 8px rgba(26,107,74,0.25);
+    }
+    .btn-primary:hover { background: var(--brand-mid); box-shadow: 0 4px 16px rgba(26,107,74,0.35); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.4rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .btn-ghost:hover { background: var(--brand-light); color: var(--brand); border-color: var(--brand); }
+    .btn-ghost:active { transform: scale(0.97); }
+    .btn-ghost:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+    .btn-danger {
+      background: transparent;
+      color: #c0392b;
+      border: 1px solid #f5c6c1;
+      border-radius: 8px;
+      padding: 0.4rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-danger:hover { background: #fdf0ef; color: #a93226; }
+    .btn-danger:active { transform: scale(0.97); }
+    .btn-danger:focus-visible { outline: 2px solid #c0392b; outline-offset: 2px; }
+
+    input, textarea, select {
+      font-family: 'Inter', sans-serif;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      width: 100%;
+      background: var(--elevated);
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(26,107,74,0.12);
+    }
+    input.error, select.error { border-color: #c0392b; box-shadow: 0 0 0 3px rgba(192,57,43,0.1); }
+
+    .group-col { min-width: 280px; max-width: 340px; flex: 1; }
+    .group-header {
+      border-radius: 10px 10px 0 0;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .group-body {
+      background: var(--elevated);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      min-height: 120px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .client-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.2s, transform 0.2s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
+    }
+    .client-card:hover {
+      background: var(--brand-light);
+      border-color: var(--brand);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(26,107,74,0.1);
+    }
+    .client-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10,20,15,0.55);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--elevated);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08);
+      padding: 2rem;
+      width: 100%;
+      max-width: 520px;
+      max-height: 90vh;
+      overflow-y: auto;
+      transform: scale(0.95) translateY(8px);
+      transition: transform 0.25s cubic-bezier(.34,1.56,.64,1);
+      position: relative;
+    }
+    .modal-overlay.open .modal { transform: scale(1) translateY(0); }
+
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .toast-msg {
+      background: var(--brand-dark);
+      color: #fff;
+      padding: 0.65rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s cubic-bezier(.34,1.56,.64,1);
+    }
+    .toast-msg.error { background: #c0392b; }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(24px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .badge {
+      background: rgba(255,255,255,0.3);
+      border-radius: 99px;
+      padding: 0.1rem 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    mark { background: #ffe066; border-radius: 2px; padding: 0 2px; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--brand); }
+
+    .empty { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 1.5rem 0; }
+    .group-body.drag-over { border-color: var(--brand); background: var(--brand-light); }
+
+    /* Sync status dot */
+    #syncDot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px rgba(34,197,94,0.6);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    #syncDot.offline { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.6); }
+    #syncDot.syncing { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.6); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Loading skeleton */
+    #loadingMsg { color: rgba(255,255,255,0.6); font-size: 0.8rem; }
+  </style>
+</head>
+<body class="relative z-10">
+
+<!-- HEADER -->
+<header style="background: var(--brand-dark);" class="relative overflow-hidden">
+  <div style="background: radial-gradient(ellipse at 20% 50%, rgba(45,144,104,0.4) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(26,107,74,0.3) 0%, transparent 60%);position:absolute;inset:0;pointer-events:none;"></div>
+  <div class="relative z-10 max-w-screen-xl mx-auto px-6 py-5 flex items-center justify-between">
+    <div>
+      <h1 style="color:#fff; letter-spacing:-0.02em; font-size:1.6rem; line-height:1.2;">Rejstřík klientů</h1>
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-top:3px;">
+        <div id="syncDot" class="syncing"></div>
+        <p id="syncLabel" style="color:rgba(255,255,255,0.55); font-size:0.78rem;">Připojování…</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <input id="searchInput" type="search" placeholder="Hledat klienta…" style="width:220px; background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.2); color:#fff;" oninput="renderAll()" />
+      <button class="btn-primary" onclick="openNewModal()" style="background:var(--brand-mid);">+ Nový klient</button>
+    </div>
+  </div>
+</header>
+
+<!-- STATS BAR -->
+<div id="statsBar" class="max-w-screen-xl mx-auto px-6 py-3 flex gap-4 flex-wrap"></div>
+
+<!-- BOARD -->
+<main class="max-w-screen-xl mx-auto px-6 pb-10">
+  <div class="flex gap-5 overflow-x-auto pb-4" id="board">
+    <p id="loadingMsg" style="color:var(--muted);font-size:0.9rem;padding:2rem 0;">Načítání dat…</p>
+  </div>
+</main>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MODAL: New / Edit -->
+<div id="clientModal" class="modal-overlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <button onclick="closeModal()" style="position:absolute;top:1rem;right:1rem;background:transparent;border:none;cursor:pointer;color:var(--muted);font-size:1.2rem;" aria-label="Zavřít">✕</button>
+    <h2 id="modalTitle" style="font-size:1.3rem; margin-bottom:1.25rem;">Nový klient</h2>
+    <form id="clientForm" onsubmit="submitClient(event)" novalidate>
+      <input type="hidden" id="editId" value="" />
+      <div class="grid gap-4" style="grid-template-columns:1fr 1fr;">
+        <div style="grid-column:1/-1;">
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Jméno *</label>
+          <input id="f_name" type="text" placeholder="Jan Novák" required />
+          <p id="err_name" style="color:#c0392b;font-size:0.75rem;margin-top:3px;display:none;"></p>
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Telefon</label>
+          <input id="f_phone" type="tel" placeholder="+420 123 456 789" />
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">E-mail</label>
+          <input id="f_email" type="email" placeholder="jan@example.cz" />
+          <p id="err_email" style="color:#c0392b;font-size:0.75rem;margin-top:3px;display:none;"></p>
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Cena (Kč)</label>
+          <input id="f_price" type="number" placeholder="0" min="0" />
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Datum</label>
+          <input id="f_date" type="date" />
+        </div>
+        <div>
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Skupina</label>
+          <select id="f_group">
+            <option value="neosloveni">Neoslovení</option>
+            <option value="osloveni">Oslovení</option>
+            <option value="navrh">Podaný návrh</option>
+            <option value="spoluprace">Spolupráce</option>
+            <option value="odmitnuti">Odmítnutí</option>
+          </select>
+        </div>
+        <div style="grid-column:1/-1;">
+          <label style="font-size:0.8rem;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;">Poznámka</label>
+          <textarea id="f_note" rows="3" placeholder="Volitelná poznámka…" style="resize:vertical;"></textarea>
+        </div>
+      </div>
+      <div id="duplicateWarning" style="display:none; background:#fff8e1; border:1px solid #ffe082; border-radius:8px; padding:0.75rem; margin-top:0.75rem; font-size:0.82rem; color:#7a5c00;">
+        ⚠️ <strong>Možný duplikát:</strong> <span id="duplicateText"></span>
+        <br><label style="margin-top:0.4rem;display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+          <input type="checkbox" id="confirmDuplicate" style="width:auto;"> Chci přesto přidat
+        </label>
+      </div>
+      <div class="flex justify-end gap-3 mt-5">
+        <button type="button" class="btn-ghost" onclick="closeModal()">Zrušit</button>
+        <button type="submit" class="btn-primary" id="submitBtn">Přidat klienta</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- MODAL: Detail -->
+<div id="detailModal" class="modal-overlay" onclick="if(event.target===this) closeDetail()">
+  <div class="modal" style="max-width:480px;">
+    <button onclick="closeDetail()" style="position:absolute;top:1rem;right:1rem;background:transparent;border:none;cursor:pointer;color:var(--muted);font-size:1.2rem;" aria-label="Zavřít">✕</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+// ─── FIREBASE ────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyA0KPbJBcrmSubrntgu16-dfMqqed2nB8s",
+  authDomain: "interni-aplikace-8a39e.firebaseapp.com",
+  projectId: "interni-aplikace-8a39e",
+  storageBucket: "interni-aplikace-8a39e.firebasestorage.app",
+  messagingSenderId: "587100265925",
+  appId: "1:587100265925:web:9f51baaa995ec81cbaffac"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ─── SKUPINY ─────────────────────────────────────────────────────────
+const GROUPS = [
+  { id: 'neosloveni', label: 'Neoslovení',   color: '#64748b', bg: '#f1f5f9' },
+  { id: 'osloveni',   label: 'Oslovení',     color: '#b45309', bg: '#fef3c7' },
+  { id: 'navrh',      label: 'Podaný návrh', color: '#1d4ed8', bg: '#eff6ff' },
+  { id: 'spoluprace', label: 'Spolupráce',   color: '#166534', bg: '#dcfce7' },
+  { id: 'odmitnuti',  label: 'Odmítnutí',    color: '#7c2d12', bg: '#fef2f2' },
+];
+
+let clients = [];
+let editingId = null;
+
+// ─── REAL-TIME LISTENER ──────────────────────────────────────────────
+setSyncStatus('syncing', 'Připojování…');
+
+db.collection('clients').onSnapshot(
+  snapshot => {
+    clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    document.getElementById('loadingMsg')?.remove();
+    setSyncStatus('online', 'Synchronizováno');
+    renderAll();
+  },
+  err => {
+    setSyncStatus('offline', 'Chyba připojení');
+    toast('Chyba připojení k databázi.', 'error');
+  }
+);
+
+function setSyncStatus(state, label) {
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLabel');
+  dot.className = state === 'online' ? '' : state;
+  lbl.textContent = label;
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────
+function renderAll() {
+  renderStats();
+  renderBoard();
+}
+
+function renderStats() {
+  const bar = document.getElementById('statsBar');
+  const total = clients.length;
+  bar.innerHTML = `<span style="font-size:0.82rem;color:var(--muted);margin-right:4px;">Celkem: <strong style="color:var(--text)">${total}</strong></span>` +
+    GROUPS.map(g => {
+      const n = clients.filter(c => c.group === g.id).length;
+      return `<span style="font-size:0.78rem;background:${g.bg};color:${g.color};border-radius:99px;padding:2px 10px;font-weight:600;">${g.label}: ${n}</span>`;
+    }).join('');
+}
+
+function highlight(text, q) {
+  if (!q) return escHtml(text);
+  const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+  return escHtml(text).replace(re, '<mark>$1</mark>');
+}
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderBoard() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+
+  GROUPS.forEach(g => {
+    let list = clients.filter(c => c.group === g.id);
+    if (q) list = list.filter(c =>
+      (c.name||'').toLowerCase().includes(q) ||
+      (c.email||'').toLowerCase().includes(q) ||
+      (c.phone||'').toLowerCase().includes(q) ||
+      (c.note||'').toLowerCase().includes(q)
+    );
+
+    const col = document.createElement('div');
+    col.className = 'group-col';
+
+    const header = document.createElement('div');
+    header.className = 'group-header';
+    header.style.cssText = `background:${g.color};color:#fff;`;
+    header.innerHTML = `<span style="width:8px;height:8px;border-radius:50%;background:#fff;opacity:0.7;flex-shrink:0;"></span>${g.label}<span class="badge">${list.length}</span>`;
+
+    const body = document.createElement('div');
+    body.className = 'group-body';
+    body.dataset.group = g.id;
+    body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('drag-over'); });
+    body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+    body.addEventListener('drop', async e => {
+      e.preventDefault();
+      body.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      const c = clients.find(x => x.id === id);
+      if (c && c.group !== g.id) {
+        setSyncStatus('syncing', 'Ukládám…');
+        await db.collection('clients').doc(id).update({ group: g.id });
+        toast(`${c.name} přesunut do „${g.label}"`);
+      }
+    });
+
+    if (list.length === 0) {
+      body.innerHTML = '<div class="empty">Žádní klienti</div>';
+    } else {
+      list.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'client-card';
+        card.tabIndex = 0;
+        card.draggable = true;
+        card.dataset.id = c.id;
+        card.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', c.id); card.style.opacity='0.5'; });
+        card.addEventListener('dragend', () => { card.style.opacity='1'; });
+        card.addEventListener('click', () => openDetail(c.id));
+        card.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') openDetail(c.id); });
+
+        const priceStr = c.price ? `<span style="color:var(--brand);font-weight:600;">${Number(c.price).toLocaleString('cs-CZ')} Kč</span>` : '';
+        const dateStr  = c.date  ? `<span style="color:var(--muted);font-size:0.72rem;">${formatDate(c.date)}</span>` : '';
+
+        card.innerHTML = `
+          <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">${highlight(c.name, q)}</div>
+          ${c.phone ? `<div style="font-size:0.77rem;color:var(--muted);">📞 ${highlight(c.phone, q)}</div>` : ''}
+          ${c.email ? `<div style="font-size:0.77rem;color:var(--muted);">✉️ ${highlight(c.email, q)}</div>` : ''}
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">${priceStr}${dateStr}</div>
+        `;
+        body.appendChild(card);
+      });
+    }
+
+    col.appendChild(header);
+    col.appendChild(body);
+    board.appendChild(col);
+  });
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  const [y,m,dd] = d.split('-');
+  return `${dd}.${m}.${y}`;
+}
+
+// ─── MODAL: NEW / EDIT ────────────────────────────────────────────────
+function openNewModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Nový klient';
+  document.getElementById('submitBtn').textContent = 'Přidat klienta';
+  document.getElementById('clientForm').reset();
+  document.getElementById('editId').value = '';
+  clearErrors();
+  hideDuplicateWarning();
+  document.getElementById('clientModal').classList.add('open');
+  setTimeout(() => document.getElementById('f_name').focus(), 100);
+}
+
+function openEditModal(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Upravit klienta';
+  document.getElementById('submitBtn').textContent = 'Uložit změny';
+  document.getElementById('editId').value = id;
+  document.getElementById('f_name').value  = c.name  || '';
+  document.getElementById('f_phone').value = c.phone || '';
+  document.getElementById('f_email').value = c.email || '';
+  document.getElementById('f_price').value = c.price || '';
+  document.getElementById('f_date').value  = c.date  || '';
+  document.getElementById('f_group').value = c.group || 'neosloveni';
+  document.getElementById('f_note').value  = c.note  || '';
+  clearErrors();
+  hideDuplicateWarning();
+  closeDetail();
+  document.getElementById('clientModal').classList.add('open');
+  setTimeout(() => document.getElementById('f_name').focus(), 100);
+}
+
+function closeModal() {
+  document.getElementById('clientModal').classList.remove('open');
+}
+
+function clearErrors() {
+  ['name','email'].forEach(f => {
+    document.getElementById(`err_${f}`).style.display = 'none';
+    document.getElementById(`f_${f}`).classList.remove('error');
+  });
+}
+
+function hideDuplicateWarning() {
+  document.getElementById('duplicateWarning').style.display = 'none';
+  document.getElementById('confirmDuplicate').checked = false;
+}
+
+// ─── DUPLICATE CHECK ──────────────────────────────────────────────────
+function findDuplicate(name, phone, email, excludeId) {
+  const nameLow  = name.trim().toLowerCase();
+  const phoneLow = phone.trim().replace(/\s/g,'').toLowerCase();
+  const emailLow = email.trim().toLowerCase();
+  return clients.find(c => {
+    if (c.id === excludeId) return false;
+    if (nameLow  && c.name  && c.name.toLowerCase()  === nameLow)  return true;
+    if (phoneLow && c.phone && c.phone.replace(/\s/g,'').toLowerCase() === phoneLow) return true;
+    if (emailLow && c.email && c.email.toLowerCase() === emailLow) return true;
+    return false;
+  });
+}
+
+['f_name','f_phone','f_email'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    const name  = document.getElementById('f_name').value;
+    const phone = document.getElementById('f_phone').value;
+    const email = document.getElementById('f_email').value;
+    if (!name && !phone && !email) { hideDuplicateWarning(); return; }
+    const dup = findDuplicate(name, phone, email, editingId);
+    if (dup) {
+      document.getElementById('duplicateWarning').style.display = 'block';
+      document.getElementById('duplicateText').textContent =
+        `Klient „${dup.name}" (${dup.email||dup.phone||'bez kontaktu'}) již existuje.`;
+    } else {
+      hideDuplicateWarning();
+    }
+  });
+});
+
+// ─── SUBMIT ──────────────────────────────────────────────────────────
+async function submitClient(e) {
+  e.preventDefault();
+  clearErrors();
+
+  const name  = document.getElementById('f_name').value.trim();
+  const email = document.getElementById('f_email').value.trim();
+  let valid = true;
+
+  if (!name) {
+    document.getElementById('err_name').textContent = 'Jméno je povinné.';
+    document.getElementById('err_name').style.display = 'block';
+    document.getElementById('f_name').classList.add('error');
+    valid = false;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    document.getElementById('err_email').textContent = 'Zadejte platnou e-mailovou adresu.';
+    document.getElementById('err_email').style.display = 'block';
+    document.getElementById('f_email').classList.add('error');
+    valid = false;
+  }
+  if (!valid) return;
+
+  const phone = document.getElementById('f_phone').value.trim();
+  const dup = findDuplicate(name, phone, email, editingId);
+  if (dup && !document.getElementById('confirmDuplicate').checked) {
+    document.getElementById('duplicateWarning').style.display = 'block';
+    document.getElementById('duplicateText').textContent =
+      `Klient „${dup.name}" (${dup.email||dup.phone||'bez kontaktu'}) již existuje.`;
+    document.getElementById('confirmDuplicate').focus();
+    return;
+  }
+
+  const data = {
+    name,
+    phone,
+    email,
+    price: document.getElementById('f_price').value,
+    date:  document.getElementById('f_date').value,
+    group: document.getElementById('f_group').value,
+    note:  document.getElementById('f_note').value.trim(),
+  };
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  setSyncStatus('syncing', 'Ukládám…');
+
+  try {
+    if (editingId) {
+      await db.collection('clients').doc(editingId).update(data);
+      toast('Klient byl upraven.');
+    } else {
+      await db.collection('clients').add(data);
+      toast('Klient byl přidán.');
+    }
+    closeModal();
+  } catch (err) {
+    toast('Chyba při ukládání: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─── DETAIL MODAL ─────────────────────────────────────────────────────
+function openDetail(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  const g = GROUPS.find(x => x.id === c.group) || GROUPS[0];
+
+  document.getElementById('detailContent').innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.25rem;">
+      <div>
+        <h2 style="font-size:1.4rem;letter-spacing:-0.02em;">${escHtml(c.name)}</h2>
+        <span style="background:${g.bg};color:${g.color};border-radius:99px;padding:2px 12px;font-size:0.78rem;font-weight:600;">${g.label}</span>
+      </div>
+    </div>
+    <div class="grid gap-3" style="grid-template-columns:1fr 1fr;margin-bottom:1rem;">
+      ${row('Telefon', c.phone ? `<a href="tel:${escHtml(c.phone)}" style="color:var(--brand)">${escHtml(c.phone)}</a>` : '—')}
+      ${row('E-mail',  c.email ? `<a href="mailto:${escHtml(c.email)}" style="color:var(--brand)">${escHtml(c.email)}</a>` : '—')}
+      ${row('Cena',    c.price ? `<strong>${Number(c.price).toLocaleString('cs-CZ')} Kč</strong>` : '—')}
+      ${row('Datum',   c.date  ? formatDate(c.date) : '—')}
+    </div>
+    ${c.note ? `<div style="background:var(--surface);border-radius:8px;padding:0.75rem;font-size:0.85rem;color:var(--muted);white-space:pre-wrap;margin-bottom:1rem;">${escHtml(c.note)}</div>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+      <div style="font-size:0.75rem;color:var(--muted);">ID: ${c.id}</div>
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn-ghost" onclick="openEditModal('${c.id}')">Upravit</button>
+        <button class="btn-danger" onclick="deleteClient('${c.id}')">Smazat</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function row(label, val) {
+  return `<div><div style="font-size:0.72rem;font-weight:600;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.05em;">${label}</div><div style="font-size:0.9rem;">${val}</div></div>`;
+}
+
+function closeDetail() {
+  document.getElementById('detailModal').classList.remove('open');
+}
+
+async function deleteClient(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`Opravdu smazat klienta „${c.name}"?`)) return;
+  setSyncStatus('syncing', 'Mažu…');
+  try {
+    await db.collection('clients').doc(id).delete();
+    closeDetail();
+    toast(`Klient „${c.name}" byl smazán.`);
+  } catch (err) {
+    toast('Chyba při mazání: ' + err.message, 'error');
+  }
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────
+function toast(msg, type) {
+  const el = document.createElement('div');
+  el.className = 'toast-msg' + (type === 'error' ? ' error' : '');
+  el.textContent = msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ─── KEYBOARD ─────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeModal(); closeDetail(); }
+});
+</script>
+</body>
+</html>
